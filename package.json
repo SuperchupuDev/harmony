@@ -1,0 +1,30 @@
+{
+  "name": "@superchupu/harmony",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file=.env src/index.ts",
+    "build": "tsc",
+    "check": "biome check",
+    "check:fix": "biome check --write --unsafe",
+    "format": "biome format --write",
+    "lint": "biome lint",
+    "start": "node --env-file=.env --enable-source-maps dist/index.js",
+    "test": "node --run check && node --run typecheck",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.14",
+    "discord-api-types": "^0.38.47",
+    "hono": "^4.12.14",
+    "say": "^0.16.0",
+    "temporal-polyfill-lite": "^0.3.4",
+    "typed-env": "^2.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.12",
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
