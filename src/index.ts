@@ -21,7 +21,11 @@ import { database } from './database.ts';
 import { env } from './env.ts';
 import type { User } from './types.ts';
 
-console.log(styleText('magenta', ' /_ _  __ _  _  _    \n/ //_|// / //_// //_/\n                  _/'));
+const port = 5073;
+
+console.log(
+  styleText('magenta', ` /_ _  __ _  _  _    \n/ //_|// / //_// //_/  http://localhost:${port}\n                  _/`)
+);
 
 const app = new Hono();
 
@@ -296,4 +300,4 @@ app.get('/voice', c => {
   return c.text('ok');
 });
 
-serve(app);
+serve({ fetch: app.fetch, port });
