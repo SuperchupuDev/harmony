@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta name="color-scheme" content="light dark" />
+  </head>
+  <body>
+    <section id="logged-out">
+      <p>You haven't logged in yet</p>
+      <a href="/auth/discord">
+        <button type="button">log in</button>
+      </a>
+    </section>
+    <section id="logged-in">
+    </section>
+    <script>
+      const loggedIn = document.querySelector('#logged-in');
+      const loggedOut = document.querySelector('#logged-out');
+
+      function getToken() {
+        const token = document.cookie.split(';').find(c => c.startsWith('access_token='))?.slice(13);
+        if (!token) {
+          return null;
+        }
+        return decodeURIComponent(token);
+      }
+
+      async function getUser(user, token) {
+        const response = await fetch(`/users/${user}`, {
+          headers: { Authorization: token }
+        });
+
+        if (!response.ok) {
+          throw new Error(`getUser returned ${response.status}`);
+        }
+
+        return response.json();
+      }
+
+      let user;
+
+      async function logout(token) {
+        const response = await fetch(`/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: token }
+        });
+
+        if (!response.ok) {
+          throw new Error(`logout returned ${response.status}`);
+        }
+
+        token = null;
+        user = null;
+      }
+
+      async function say(text) {
+        if (!text) {
+          return;
+        }
+        const response = await fetch(`/voice?text=${text}`);
+        if (!response.ok) {
+          throw new Error(`voice returned ${response.status}`);
+        }
+      }
+
+      async function upd8() {
+        const token = getToken();
+        loggedOut.style.display = token ? 'none' : 'block';
+
+        if (token) {
+          user ??= await getUser('@me', token);
+          loggedIn.innerHTML = `
+          <h1>${user.username}</h1>
+          <p>${user.id}</p>
+          <img src="https://cdn.discordapp.com${user.avatar}">
+          <p>
+            <button id="logout">log out</button>
+          </p>
+          <input id="voice-input" type="text">
+          <button id="voice-submit">submit</button>
+          `
+          document.querySelector('#logout').addEventListener('click', async () => {
+            await logout(token);
+            upd8();
+          });
+          const voiceInput = document.querySelector('#voice-input');
+          document.querySelector('#voice-submit').addEventListener('click', async () => {
+            const text = voiceInput?.value;
+            voiceInput.value = '';
+            await say(text);
+          });
+          voiceInput.addEventListener('keydown', async e => {
+            if (e.code !== 'Enter') {
+              return;
+            }
+
+            const text = voiceInput?.value;
+            voiceInput.value = '';
+            await say(text);
+          });
+        } else {
+          loggedIn.innerHTML = ''
+        }
+      }
+
+      upd8();
+    </script>
+  </body>
+</html>

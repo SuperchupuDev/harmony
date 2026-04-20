@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { styleText } from 'node:util';
 import { serve } from '@hono/node-server';
 import {
@@ -10,17 +12,16 @@ import {
   Routes
 } from 'discord-api-types/v10';
 import { Hono } from 'hono';
-import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import { deleteCookie, setCookie } from 'hono/cookie';
 import { logger } from 'hono/logger';
 import say from 'say';
 import { Temporal } from 'temporal-polyfill-lite';
-
 import { decrypt, encrypt, generateIv } from './crypto.ts';
 import { database } from './database.ts';
 import { env } from './env.ts';
 import type { User } from './types.ts';
 
-console.log(styleText('magenta', ' /_ _  __ _  _  _    \n/ //_|// / //_// //_/\n                  _/ '));
+console.log(styleText('magenta', ' /_ _  __ _  _  _    \n/ //_|// / //_// //_/\n                  _/'));
 
 const app = new Hono();
 
@@ -39,62 +40,103 @@ app.get('/auth/discord', c => {
 });
 
 app.get('/', async c => {
-  const tokenCookie = getCookie(c, 'access_token');
+  // prototype client
+  const html = await readFile(path.join(import.meta.dirname, './index.html'), 'utf-8');
+  return c.html(html);
+});
 
-  if (!tokenCookie) {
-    return c.html(`
-    <!doctype html>
-    <html>
-      <head>
-        <meta name="color-scheme" content="light dark" />
-      </head>
-      <body>
-        <p>You haven't logged in yet<p>
-        <a href="/auth/discord"><button>log in</button></a>
-      </body>
-    </html>
-  `);
+app.get('/users/@me', async c => {
+  const authToken = c.req.header('Authorization');
+
+  if (!authToken) {
+    c.status(403);
+    return c.text('Missing "Authorization" header');
   }
 
-  const tokenBytes = Uint8Array.fromBase64(tokenCookie);
-  const user = database
+  const tokenBytes = Uint8Array.fromBase64(authToken);
+  const userAuth = database
     .prepare(`
-      SELECT id, username, avatar, access_token_iv
+      SELECT access_token_iv, banned
         FROM users
         WHERE access_token = ?
   `)
     .get(tokenBytes) as User | undefined;
 
-  if (!user?.access_token_iv) {
+  if (!userAuth?.access_token_iv) {
     c.status(403);
     return c.text('Session not found');
   }
 
-  const accessToken = await decrypt(tokenBytes, user.access_token_iv);
-  console.log(accessToken);
+  const accessToken = await decrypt(tokenBytes, userAuth.access_token_iv);
+
+  const response = await fetch(`${RouteBases.api}/${Routes.user()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+
+  if (!response.ok) {
+    c.status(400);
+    return c.text(`Discord user endpoint returned ${response.status} ${response.statusText}`);
+  }
+
+  const user = (await response.json()) as APIUser;
+
+  database
+    .prepare(`
+      UPDATE users
+        SET username = @username, avatar = @avatar
+        WHERE id = @id
+    `)
+    .run({
+      id: user.id,
+      username: user.username,
+      avatar: user.avatar
+    });
 
   const avatarURL = user.avatar
-    ? CDNRoutes.userAvatar(user.id, user.avatar, ImageFormat.WebP)
+    ? CDNRoutes.userAvatar(user.id, user.avatar, user.avatar.startsWith('a_') ? ImageFormat.GIF : ImageFormat.WebP)
     : CDNRoutes.defaultUserAvatar((Number(BigInt(user.id) >> 22n) % 6) as 0);
 
-  return c.html(`
-    <!doctype html>
-    <html>
-      <head>
-        <meta name="color-scheme" content="light dark" />
-      </head>
-      <body>
-        <h1>${user.username}</h1>
-        <p>${user.id}</p>
-        <img src="${RouteBases.cdn}/${avatarURL}">
-        <p>
-          <a href="/auth/logout"><button>log out</button></a>
-        </p>
-        <input type="text">
-        <button type="submit" onclick="console.log(event)">submit</button>
-      </body>
-    </html>
-  `);
+  return c.json({
+    id: user.id,
+    username: user.username,
+    avatar: avatarURL,
+    banned: userAuth.banned ?? false
+  });
+});
+
+app.get('/users/:id', c => {
+  const userId = c.req.param('id');
+
+  if (!userId) {
+    c.status(400);
+    return c.text('Missing user id');
+  }
+
+  const user = database
+    .prepare(`
+      SELECT username, avatar, banned
+        FROM users
+        WHERE id = ?
+  `)
+    .get(userId) as User | undefined;
+
+  if (!user) {
+    c.status(404);
+    return c.text('User not found');
+  }
+
+  const avatarURL = user.avatar
+    ? CDNRoutes.userAvatar(userId, user.avatar, user.avatar.startsWith('a_') ? ImageFormat.GIF : ImageFormat.WebP)
+    : CDNRoutes.defaultUserAvatar((Number(BigInt(user.id) >> 22n) % 6) as 0);
+
+  return c.json({
+    id: userId,
+    username: user.username,
+    avatar: avatarURL,
+    banned: user.banned ?? false
+  });
 });
 
 app.get('/auth/discord/callback', async c => {
@@ -142,7 +184,7 @@ app.get('/auth/discord/callback', async c => {
 
   if (!userResponse.ok) {
     c.status(400);
-    return c.text(`Discord user endpoint returned ${response.status} ${response.statusText}`);
+    return c.text(`Discord user endpoint returned ${userResponse.status} ${userResponse.statusText}`);
   }
 
   const user = (await userResponse.json()) as APIUser;
@@ -179,7 +221,6 @@ app.get('/auth/discord/callback', async c => {
     });
 
   setCookie(c, 'access_token', new Uint8Array(accessToken).toBase64(), {
-    httpOnly: true,
     secure: true,
     sameSite: 'Lax',
     maxAge: oauthData.expires_in
@@ -187,15 +228,15 @@ app.get('/auth/discord/callback', async c => {
   return c.redirect('/');
 });
 
-app.get('/auth/logout', async c => {
-  const tokenCookie = getCookie(c, 'access_token');
+app.post('/auth/logout', async c => {
+  const authToken = c.req.header('Authorization');
 
-  if (!tokenCookie) {
+  if (!authToken) {
     c.status(400);
-    return c.text('Missing "access_token" cookie');
+    return c.text('Missing "Authorization" header');
   }
 
-  const tokenBytes = Uint8Array.fromBase64(tokenCookie);
+  const tokenBytes = Uint8Array.fromBase64(authToken);
   const user = database
     .prepare(`
       SELECT access_token_iv
@@ -239,7 +280,7 @@ app.get('/auth/logout', async c => {
     .run(tokenBytes);
 
   deleteCookie(c, 'access_token');
-  return c.redirect('/');
+  return c.text('ok');
 });
 
 app.get('/voice', c => {
