@@ -24,7 +24,7 @@ import type { User } from './types.ts';
 const port = 5073;
 
 console.log(
-  styleText('magenta', ` /_ _  __ _  _  _    \n/ //_|// / //_// //_/  ${env.BASE_URL}\n                  _/`)
+  styleText('magenta', ` /_ _  __ _  _  _    \n/ //_|// / //_// //_/  ${env.BASE_URL.origin}\n                  _/`)
 );
 
 const app = new Hono();
@@ -35,7 +35,7 @@ app.get('/auth/discord', c => {
   const params = new URLSearchParams({
     client_id: env.CLIENT_ID,
     response_type: 'code',
-    redirect_uri: `${env.BASE_URL}/auth/discord/callback`,
+    redirect_uri: `${env.BASE_URL}auth/discord/callback`,
     scope: 'identify',
     prompt: 'none'
   });
@@ -143,6 +143,20 @@ app.get('/users/:id', c => {
   });
 });
 
+function handleCookieDomain(hostname: string): string | undefined {
+  if (hostname === 'localhost') {
+    return undefined;
+  }
+
+  const parts = hostname.split('.');
+
+  if (parts.length === 2) {
+    return `.${hostname}`;
+  }
+
+  return hostname.slice(parts[0].length);
+}
+
 app.get('/auth/discord/callback', async c => {
   const code = c.req.query('code');
   const error = c.req.query('error');
@@ -163,7 +177,7 @@ app.get('/auth/discord/callback', async c => {
       client_secret: env.CLIENT_SECRET,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: `${env.BASE_URL}/auth/discord/callback`,
+      redirect_uri: `${env.BASE_URL}auth/discord/callback`,
       scope: 'identify'
     }).toString(),
     headers: {
@@ -225,6 +239,7 @@ app.get('/auth/discord/callback', async c => {
     });
 
   setCookie(c, 'access_token', new Uint8Array(accessToken).toBase64(), {
+    domain: handleCookieDomain(env.BASE_URL.hostname),
     secure: true,
     sameSite: 'Lax',
     maxAge: oauthData.expires_in
