@@ -24,7 +24,7 @@ import type { User } from './types.ts';
 const port = 5073;
 
 console.log(
-  styleText('magenta', ` /_ _  __ _  _  _    \n/ //_|// / //_// //_/  http://localhost:${port}\n                  _/`)
+  styleText('magenta', ` /_ _  __ _  _  _    \n/ //_|// / //_// //_/  ${env.BASE_URL}\n                  _/`)
 );
 
 const app = new Hono();
@@ -35,7 +35,7 @@ app.get('/auth/discord', c => {
   const params = new URLSearchParams({
     client_id: env.CLIENT_ID,
     response_type: 'code',
-    redirect_uri: 'http://localhost:3000/auth/discord/callback',
+    redirect_uri: `${env.BASE_URL}/auth/discord/callback`,
     scope: 'identify',
     prompt: 'none'
   });
@@ -163,7 +163,7 @@ app.get('/auth/discord/callback', async c => {
       client_secret: env.CLIENT_SECRET,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: 'http://localhost:3000/auth/discord/callback',
+      redirect_uri: `${env.BASE_URL}/auth/discord/callback`,
       scope: 'identify'
     }).toString(),
     headers: {
