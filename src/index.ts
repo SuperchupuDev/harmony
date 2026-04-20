@@ -13,6 +13,7 @@ import {
 } from 'discord-api-types/v10';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
+import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import say from 'say';
 import { Temporal } from 'temporal-polyfill-lite';
@@ -30,6 +31,17 @@ console.log(
 const app = new Hono();
 
 app.use(logger());
+
+if (env.BASE_URL.hostname !== 'localhost') {
+  const parts = env.BASE_URL.hostname.split('.');
+  const { origin } = env.BASE_URL;
+  app.use(
+    '*',
+    cors({
+      origin: parts.length === 2 ? origin : `${env.BASE_URL.protocol}//${origin.slice(origin.indexOf('.') + 1)}`
+    })
+  );
+}
 
 app.get('/auth/discord', c => {
   const params = new URLSearchParams({
