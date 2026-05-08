@@ -16,7 +16,7 @@
   "dependencies": {
     "@hono/node-server": "^1.19.14",
     "discord-api-types": "^0.38.47",
-    "hono": "^4.12.14",
+    "hono": "^4.12.16",
     "say": "^0.16.0",
     "temporal-polyfill-lite": "^0.3.4",
     "typed-env": "^2.0.0"
