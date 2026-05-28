@@ -16,7 +16,6 @@ import { deleteCookie, setCookie } from 'hono/cookie';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import say from 'say';
-import { Temporal } from 'temporal-polyfill-lite';
 import { decrypt, encrypt, generateIv } from './crypto.ts';
 import { database } from './database.ts';
 import { env } from './env.ts';
@@ -230,7 +229,7 @@ app.get('/auth/discord/callback', async c => {
       INSERT INTO users (
         id, username, avatar, access_token, access_token_iv, refresh_token, refresh_token_iv, expires_at
       )
-        VALUES ( 
+        VALUES (
           @id, @username, @avatar, @accessToken, @accessTokenIv, @refreshToken, @refreshTokenIv, @expiresAt
         )
         ON CONFLICT (id) DO UPDATE
