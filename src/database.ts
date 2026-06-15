@@ -5,8 +5,7 @@ await mkdir('./storage').catch(() => null);
 
 export const database = new DatabaseSync('./storage/database.db');
 
-database
-  .prepare(`
+database.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL,
@@ -20,5 +19,13 @@ database
 
       banned INTEGER
     ) STRICT;
-  `)
-  .run();
+
+    CREATE TABLE IF NOT EXISTS gwell (
+      id INTEGER PRIMARY KEY,
+      name TEXT,
+      text TEXT,
+      color TEXT
+    ) STRICT;
+
+    INSERT OR IGNORE INTO gwell (id) VALUES (0);
+  `);

@@ -15,6 +15,7 @@ import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { trimTrailingSlash } from 'hono/trailing-slash';
 import say from 'say';
 import { decrypt, encrypt, generateIv } from './crypto.ts';
 import { database } from './database.ts';
@@ -30,6 +31,7 @@ console.log(
 const app = new Hono();
 
 app.use(logger());
+app.use(trimTrailingSlash());
 
 if (env.BASE_URL.hostname !== 'localhost') {
   const parts = env.BASE_URL.hostname.split('.');
@@ -167,6 +169,116 @@ function handleCookieDomain(hostname: string): string | undefined {
 
   return hostname.slice(parts[0].length);
 }
+
+interface Gwell {
+  name?: string;
+  text?: string;
+  color?: string;
+}
+
+app.get('/gwell', c => {
+  const them = database
+    .prepare(`
+      SELECT name, text, color
+        FROM gwell
+        WHERE id = 0
+    `)
+    .get() as Gwell;
+
+  return c.html(`
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="color-scheme" content="light dark" />
+      <style>
+        main {
+          color: ${them.color?.replaceAll(/<>/g, '') ?? 'CanvasText'};
+          text-align: center;
+          margin-top: 20vh
+        }
+        button {
+          margin-top: 30vh;
+        }
+      </style>
+    </head>
+    <body>
+      <main>
+        <h1>${them.name?.replaceAll(/<>/g, '') ?? 'not set right now'}</h1>
+        <p>${them.text?.replaceAll(/<>/g, '') ?? ''}</p>
+        <a href="/gwell/admin"><button>admin page</button></a>
+      </main>
+    </body>
+  `);
+});
+
+app.get('/gwell/admin', c => {
+  return c.html(`<!doctype html>
+  <html lang="en">
+    <head>
+      <meta name="color-scheme" content="light dark" />
+      <style>
+        main {
+          text-align: center;
+        }
+      </style>
+    </head>
+    <body>
+    <form method="post">
+      <label>
+        Name:
+        <input name="name" required />
+      </label>
+      <label>
+        Additional text:
+        <input name="text" />
+      </label>
+      <label>
+        Color:
+        <input type="color" name="color" />
+      </label>
+      <label>
+        Password:
+        <input type="password" name="password" required />
+      </label>
+      <button>Save</button>
+    </form>
+    </body>`);
+});
+
+app.post('/gwell/admin', async c => {
+  const data = await c.req.formData();
+  if (!data) {
+    c.status(403);
+    return c.text('no password');
+  }
+
+  const pass = new TextEncoder().encode((data.get('password') as string) ?? '');
+  const hash = await crypto.subtle.digest('SHA-256', pass);
+  console.log(new Uint8Array(hash).toHex());
+
+  if (new Uint8Array(hash).toHex() !== env.GWELL_SECRET) {
+    c.status(403);
+    return c.text('wrøng passwørd :)');
+  }
+
+  const color = data.get('color') as string;
+
+  database
+    .prepare(`
+      UPDATE gwell
+        SET name = @name, text = @text, color = @color
+        WHERE id = 0
+    `)
+    .run({
+      name: data.get('name') as string,
+      text: data.get('text') as string,
+      color: color === '#ffffff' || color === '#000000' ? null : color
+    });
+
+  return c.redirect('/gwell');
+});
 
 app.get('/auth/discord/callback', async c => {
   const code = c.req.query('code');
