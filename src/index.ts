@@ -214,36 +214,62 @@ app.get('/gwell', c => {
 });
 
 app.get('/gwell/admin', c => {
-  return c.html(`<!doctype html>
+  return c.html(`
+  <!doctype html>
   <html lang="en">
     <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
       <meta name="color-scheme" content="light dark" />
       <style>
-        main {
+        h1 {
           text-align: center;
+          margin-top: 20vh;
+        }
+
+        form {
+          max-width: fit-content;
+          margin: 0 auto;
+        }
+
+        div {
+          display: table-row;
+        }
+
+        label,
+        input {
+          display: table-cell;
+          margin-bottom: 10px;
+        }
+
+        label {
+          padding-right: 10px;
         }
       </style>
     </head>
     <body>
-    <form method="post">
-      <label>
-        Name:
-        <input name="name" required />
-      </label>
-      <label>
-        Additional text:
-        <input name="text" />
-      </label>
-      <label>
-        Color:
-        <input type="color" name="color" />
-      </label>
-      <label>
-        Password:
-        <input type="password" name="password" required />
-      </label>
-      <button>Save</button>
-    </form>
+      <h1>enter</h1>
+      <form method="post">
+        <div>
+          <label for="name">Name:</label>
+          <input type="text" name="name" required />
+        </div>
+        <div>
+          <label for="text">Additional text:</label>
+          <input type="text" name="text" />
+        </div>
+        <div>
+          <label for="color">Color:</label>
+          <input type="color" name="color" />
+        </div>
+        <div>
+          <label>Password:</label>
+          <input type="password" name="password" required />
+        </div>
+        <div>
+          <button>Save</button>
+        </div>
+      </form>
     </body>`);
 });
 
@@ -263,7 +289,11 @@ app.post('/gwell/admin', async c => {
     return c.text('wrøng passwørd :)');
   }
 
+  const name = (data.get('name') as string).trim();
+  const text = (data.get('text') as string).trim();
   const color = data.get('color') as string;
+
+  const old = database.prepare(`SELECT name FROM gwell WHERE id = 0`).get() as Gwell;
 
   database
     .prepare(`
@@ -272,10 +302,22 @@ app.post('/gwell/admin', async c => {
         WHERE id = 0
     `)
     .run({
-      name: data.get('name') as string,
-      text: data.get('text') as string,
+      name,
+      text,
       color: color === '#ffffff' || color === '#000000' ? null : color
     });
+
+  if (env.GWELL_WEBHOOK_URL && old.name?.toLowerCase() !== name.toLowerCase()) {
+    await fetch(env.GWELL_WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        content: `currently ${name} @everyone`
+      })
+    });
+  }
 
   return c.redirect('/gwell');
 });
